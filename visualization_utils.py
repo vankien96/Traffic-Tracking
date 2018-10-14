@@ -602,6 +602,7 @@ def visualize_boxes_and_labels_on_image_array(
   box_to_instance_masks_map = {}
   box_to_instance_boundaries_map = {}
   box_to_keypoints_map = collections.defaultdict(list)
+  box_with_scores = collections.defaultdict(list)
   if not max_boxes_to_draw:
     max_boxes_to_draw = boxes.shape[0]
   for i in range(min(max_boxes_to_draw, boxes.shape[0])):
@@ -630,6 +631,7 @@ def visualize_boxes_and_labels_on_image_array(
           else:
             display_str = '{}: {}%'.format(display_str, int(100*scores[i]))
         box_to_display_str_map[box].append(display_str)
+        box_with_scores[box] = int(100*scores[i])
         if agnostic_mode:
           box_to_color_map[box] = 'DarkOrange'
         else:
@@ -670,7 +672,7 @@ def visualize_boxes_and_labels_on_image_array(
           radius=line_thickness / 2,
           use_normalized_coordinates=use_normalized_coordinates)
 
-  return image, box_to_color_map, box_to_display_str_map
+  return image, box_with_scores, box_to_display_str_map
 
 
 def add_cdf_image_summary(values, name):

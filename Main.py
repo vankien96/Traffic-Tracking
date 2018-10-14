@@ -12,6 +12,7 @@ import lineInfo as line
 import CentroidTracker
 import Draw as draw
 import sort
+from collections import OrderedDict
 
 from collections import defaultdict
 from io import StringIO
@@ -25,7 +26,7 @@ import visualization_utils as vis_util
 if StrictVersion(tf.__version__) < StrictVersion('1.9.0'):
   raise ImportError('Please upgrade your TensorFlow installation to v1.9.* or later!')
 
-SYSTEM_PATH = "D:/models/research/object_detection"
+SYSTEM_PATH = "D:/Python/DoAn/TrackingTraffic/Traffic-Tracking"
 
 MODEL_NAME = SYSTEM_PATH + "/" + "trained"
 
@@ -53,14 +54,16 @@ def load_image_into_numpy_array(image):
   (im_width, im_height) = image.shape[:2]
   return np.array(image).reshape((im_height, im_width, 3)).astype(np.uint8)
 
-### line not detect y = 0.8*x - 401.5
-a = 0.8
-b = -401.5
-cap = cv2.VideoCapture("D:/Python/DoAn/TrackingTraffic/demo.mp4")
+cap = cv2.VideoCapture("D:/Python/DoAn/TrackingTraffic/Traffic-Tracking/demo.mp4")
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
-out = cv2.VideoWriter("D:/Python/DoAn/TrackingTraffic/output2.avi", fourcc, 20.0, (1280, 720) )
+out = cv2.VideoWriter("D:/Python/DoAn/TrackingTraffic/Traffic-Tracking/output2.avi", fourcc, 13.0, (1280, 720) )
 ret = True
-ct = CentroidTracker.CentroidTracker()
+# ct = CentroidTracker.CentroidTracker()
+tracker = sort.Sort()
+
+location_before_red_light = OrderedDict()
+violate_moto = []
+
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
     # Definite input and output Tensors for detection_graph
@@ -100,30 +103,57 @@ with detection_graph.as_default():
             del box_to_color_map[box]
 
         is_red = lightDec.is_red_light(image_np)
-        rects = []
-        for box, color in box_to_color_map.items():
+        dets = []
+
+        for box, score in box_to_color_map.items():
             ymin, xmin, ymax, xmax = box
             im_height, im_width = image_np.shape[:2]
             (start_x, end_x, start_y, end_y) = (int(xmin * im_width), int(xmax * im_width), int(ymin * im_height), int(ymax * im_height))
-            rects.append((start_x, start_y, end_x, end_y))
+            dets.append(np.array([start_x, start_y, end_x, end_y, score]))
+            # cv2.rectangle(image_np, (start_x, start_y), (end_x, end_y), [0, 255, 0], 1)
+        
+        dataTrack = tracker.update(np.array(dets))
+
+        for data in dataTrack:
+          (start_x, start_y, end_x, end_y) = (int(data[0]), int(data[1]), int(data[2]), int(data[3]))
+          trackingID = int(data[4])
+          draw.put_objectID_into_object(image_np, (start_x, start_y), trackingID)
+          if is_red:
+            if trackingID not in location_before_red_light.keys():
+              location_before_red_light[trackingID] = (start_x, start_y, end_x, end_y)
+            initLocation = location_before_red_light[trackingID]
+
+            # check if location when light turn red and current 
+            # if moto cross the line
+            if (end_y - 50) < line.line_center_y and initLocation[3] > line.line_center_y:
+              cv2.rectangle(image_np, (start_x, start_y), (end_x, end_y), [0, 0, 255], 1)
+              if trackingID not in violate_moto:
+                violate_moto.append(trackingID)
+              draw.put_number_moto_violate(image_np, len(violate_moto))
+            else:
+              cv2.rectangle(image_np, (start_x, start_y), (end_x, end_y), [0, 255, 0], 1)
+          else:
             cv2.rectangle(image_np, (start_x, start_y), (end_x, end_y), [0, 255, 0], 1)
         
-        ct.update(rects)
-        for (objectID, location) in ct.currentLocation.items():
-            rect = (location[0], location[1], location[2], location[3])
-            if rect in rects:
-                cv2.rectangle(image_np, (location[0], location[1]), (location[2], location[3]), [0, 255, 0], 1)
-                draw.put_objectID_into_object(image_np, (location[0], location[1]), objectID)
-            if is_red:
-                centroid = ct.objects[objectID]
-                if objectID not in ct.initLocation.keys():
-                  ct.initLocation[objectID] = centroid
-                initCentroid = ct.initLocation[objectID]
-                if initCentroid[1] > line.line_center_y and centroid[1] < line.line_center_y:
-                    cv2.rectangle(image_np, (location[0], location[1]), (location[2], location[3]), [0, 0, 255], 1)
-          
+        draw.put_number_moto_violate(image_np, len(violate_moto))
 
-        out.write(image_np)
+
+                
+        # ct.update(rects)
+        # for (objectID, location) in ct.currentLocation.items():
+        #     rect = (location[0], location[1], location[2], location[3])
+        #     if rect in rects:
+        #       cv2.rectangle(image_np, (location[0], location[1]), (location[2], location[3]), [0, 255, 0], 1)
+        #       draw.put_objectID_into_object(image_np, (location[0], location[1]), objectID)
+        #     if is_red:
+        #       centroid = ct.objects[objectID]
+        #       if objectID not in ct.initLocation.keys():
+        #         ct.initLocation[objectID] = centroid
+        #       initCentroid = ct.initLocation[objectID]
+        #       if initCentroid[1] > line.line_center_y and centroid[1] < line.line_center_y:
+        #         cv2.rectangle(image_np, (location[0], location[1]), (location[2], location[3]), [0, 0, 255], 1)
+
+        # out.write(image_np)
         cv2.imshow("image", image_np)
         if cv2.waitKey(1) == 13:
             break

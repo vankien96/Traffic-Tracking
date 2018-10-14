@@ -28,6 +28,7 @@ import glob
 import time
 import argparse
 from filterpy.kalman import KalmanFilter
+from collections import OrderedDict 
 
 @jit
 def iou(bb_test,bb_gt):
@@ -173,7 +174,7 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
 
 
 class Sort(object):
-  def __init__(self,max_age=1,min_hits=3):
+  def __init__(self,max_age=10,min_hits=2):
     """
     Sets key parameters for SORT
     """
@@ -181,6 +182,7 @@ class Sort(object):
     self.min_hits = min_hits
     self.trackers = []
     self.frame_count = 0
+    self.objects = OrderedDict()
 
   def update(self,dets):
     """
@@ -214,8 +216,10 @@ class Sort(object):
 
     #create and initialise new trackers for unmatched detections
     for i in unmatched_dets:
-        trk = KalmanBoxTracker(dets[i,:]) 
+        trk = KalmanBoxTracker(dets[i,:4]) 
         self.trackers.append(trk)
+        # register object
+        self.objects[trk.id] = dets[i,:4]
     i = len(self.trackers)
     for trk in reversed(self.trackers):
         d = trk.get_state()[0]
@@ -226,73 +230,9 @@ class Sort(object):
         if(trk.time_since_update > self.max_age):
           self.trackers.pop(i)
     if(len(ret)>0):
+      rets = np.concatenate(ret)
+      for item in rets:
+        self.objects[item[4]] = item[:4]
       return np.concatenate(ret)
     return np.empty((0,5))
-    
-def parse_args():
-    """Parse input arguments."""
-    parser = argparse.ArgumentParser(description='SORT demo')
-    parser.add_argument('--display', dest='display', help='Display online tracker output (slow) [False]',action='store_true')
-    args = parser.parse_args()
-    return args
-
-if __name__ == '__main__':
-  # all train
-  sequences = ['PETS09-S2L1','TUD-Campus','TUD-Stadtmitte','ETH-Bahnhof','ETH-Sunnyday','ETH-Pedcross2','KITTI-13','KITTI-17','ADL-Rundle-6','ADL-Rundle-8','Venice-2']
-  args = parse_args()
-  display = args.display
-  phase = 'train'
-  total_time = 0.0
-  total_frames = 0
-  colours = np.random.rand(32,3) #used only for display
-  if(display):
-    if not os.path.exists('mot_benchmark'):
-      print('\n\tERROR: mot_benchmark link not found!\n\n    Create a symbolic link to the MOT benchmark\n    (https://motchallenge.net/data/2D_MOT_2015/#download). E.g.:\n\n    $ ln -s /path/to/MOT2015_challenge/2DMOT2015 mot_benchmark\n\n')
-      exit()
-    plt.ion()
-    fig = plt.figure() 
-  
-  if not os.path.exists('output'):
-    os.makedirs('output')
-  
-  for seq in sequences:
-    mot_tracker = Sort() #create instance of the SORT tracker
-    seq_dets = np.loadtxt('data/%s/det.txt'%(seq),delimiter=',') #load detections
-    with open('output/%s.txt'%(seq),'w') as out_file:
-      print("Processing %s."%(seq))
-      for frame in range(int(seq_dets[:,0].max())):
-        frame += 1 #detection and frame numbers begin at 1
-        dets = seq_dets[seq_dets[:,0]==frame,2:7]
-        dets[:,2:4] += dets[:,0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-        total_frames += 1
-
-        if(display):
-          ax1 = fig.add_subplot(111, aspect='equal')
-          fn = 'mot_benchmark/%s/%s/img1/%06d.jpg'%(phase,seq,frame)
-          im =io.imread(fn)
-          ax1.imshow(im)
-          plt.title(seq+' Tracked Targets')
-
-        start_time = time.time()
-        trackers = mot_tracker.update(dets)
-        cycle_time = time.time() - start_time
-        total_time += cycle_time
-
-        for d in trackers:
-          print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1'%(frame,d[4],d[0],d[1],d[2]-d[0],d[3]-d[1]),file=out_file)
-          if(display):
-            d = d.astype(np.int32)
-            ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
-            ax1.set_adjustable('box-forced')
-
-        if(display):
-          fig.canvas.flush_events()
-          plt.draw()
-          ax1.cla()
-
-  print("Total Tracking took: %.3f for %d frames or %.1f FPS"%(total_time,total_frames,total_frames/total_time))
-  if(display):
-    print("Note: to get real runtime results run without the option: --display")
-  
-
 
