@@ -16,7 +16,7 @@ def av_color_intensity(img,x1,y1,x2,y2,col):
         for y in range(y1,y2+1):
             col_intensity += img[y, x][col] - np.mean(img[y, x])
     # return average
-    return col_intensity/( (x2-x1 + 1)*(y2-y1 + 1))
+    return col_intensity/((x2-x1)*(y2-y1))
 
 def is_red_light(image):
     global red_box_LT, green_box_LT
@@ -35,6 +35,19 @@ def is_red_light(image):
         cv2.rectangle(image, draw_box_UL, draw_box_LR, (0,255,0), 1)
         return False
     return False
+
+def is_green_light(image):
+    global red_box_LT, red_box_RB, green_box_LT, green_box_RB
+    ## convert to hsv
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    ## mask of green (36,0,0) ~ (70, 255,255)
+    mask = cv2.inRange(hsv, (36, 0, 0), (70, 255,255))
+    ## slice the green
+    imask = mask>0
+    green = np.zeros_like(image, np.uint8)
+    green[imask] = image[imask]
+    return green
+
 #####################################################
 # Detect light 
 #####################################################
