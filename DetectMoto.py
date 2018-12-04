@@ -72,6 +72,6 @@ def detect_moto(image):
             skip_scores=True)
             for box, nameObject in box_of_string.items():
                 if nameObject[0] == 'car':
-                    del box_to_color_map[box]
+                  del box_to_color_map[box]
             return box_to_color_map
 

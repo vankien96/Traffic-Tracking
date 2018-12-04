@@ -26,27 +26,15 @@ def is_red_light(image):
         # update search area and add box
     if red_box_intensity > 1.33*green_box_intensity:
         draw_box_UL = (red_box_LT[0], red_box_LT[1])
-        draw_box_LR = (red_box_RB[0] + 10, red_box_RB[1] + 10)
+        draw_box_LR = (red_box_RB[0], red_box_RB[1])
         cv2.rectangle(image, draw_box_UL, draw_box_LR, (0,0,255), 1)
         return True
     if green_box_intensity > 1.33*red_box_intensity:
         draw_box_UL = (green_box_LT[0], green_box_LT[1])
-        draw_box_LR = (green_box_RB[0] + 10, green_box_RB[1] + 10)
+        draw_box_LR = (green_box_RB[0], green_box_RB[1])
         cv2.rectangle(image, draw_box_UL, draw_box_LR, (0,255,0), 1)
         return False
     return False
-
-def is_green_light(image):
-    global red_box_LT, red_box_RB, green_box_LT, green_box_RB
-    ## convert to hsv
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    ## mask of green (36,0,0) ~ (70, 255,255)
-    mask = cv2.inRange(hsv, (36, 0, 0), (70, 255,255))
-    ## slice the green
-    imask = mask>0
-    green = np.zeros_like(image, np.uint8)
-    green[imask] = image[imask]
-    return green
 
 #####################################################
 # Detect light 
